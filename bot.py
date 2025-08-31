@@ -1,30 +1,18 @@
-# 📦 Imports
 import os
 import re
 import time
 import random
-import threading
-from flask import Flask
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from flask import Flask, request
 
 # 🔐 Bot Config
 TOKEN = os.environ.get("BOT_TOKEN", "PASTE_YOUR_BOT_TOKEN_HERE")
-CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "TrickHubBD")  # without @
-
+CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "TrickHubBD")
 bot = telebot.TeleBot(TOKEN)
 
-# 🌐 Flask (keep alive for Heroku/Railway)
-flask_app = Flask(__name__)
-
-@flask_app.route("/")
-def home():
-    return "❤️ Lovely Gen Bot is Live!"
-
-def run():
-    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
-threading.Thread(target=run).start()
+# 🌐 Flask App
+app = Flask(__name__)
 
 # ===========================
 # 🎯 Luhn + Gen Functions
@@ -34,7 +22,6 @@ def luhn(card):
     return (sum(nums[-1::-2]) + sum(sum(divmod(2 * x, 10)) for x in nums[-2::-2])) % 10 == 0
 
 def generate_card(bin_format):
-    # make sure bin length = 16
     if len(bin_format) < 16:
         bin_format += "x" * (16 - len(bin_format))
     else:
@@ -83,8 +70,6 @@ def generate_output(bin_input, username):
 # ===========================
 # 🎯 Commands
 # ===========================
-
-# ✅ /start
 @bot.message_handler(commands=['start'])
 def start_handler(message):
     user = message.from_user.first_name
@@ -99,7 +84,6 @@ def start_handler(message):
         ]])
     )
 
-# ✅ /gen
 @bot.message_handler(commands=['gen'])
 def gen_handler(message):
     parts = message.text.split(" ", 1)
@@ -114,7 +98,6 @@ def gen_handler(message):
     btn.add(InlineKeyboardButton("♻️ Re-Generate", callback_data=f"again|{bin_input}"))
     bot.reply_to(message, text, parse_mode="HTML", reply_markup=btn)
 
-# 🔁 Re-Generate Button
 @bot.callback_query_handler(func=lambda call: call.data.startswith("again|"))
 def again_handler(call):
     bin_input = call.data.split("|", 1)[1]
@@ -134,7 +117,17 @@ def again_handler(call):
         bot.send_message(call.message.chat.id, text, parse_mode="HTML", reply_markup=btn)
 
 # ===========================
-# 🚀 Run Bot
+# 🌐 Webhook Setup
 # ===========================
-print("🤖 Lovely Gen Bot is running...")
-bot.polling()
+@app.route("/" + TOKEN, methods=['POST'])
+def getMessage():
+    json_str = request.get_data().decode("UTF-8")
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return "!", 200
+
+@app.route("/")
+def webhook():
+    bot.remove_webhook()
+    bot.set_webhook(url=f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}")
+    return "Webhook set!", 200
