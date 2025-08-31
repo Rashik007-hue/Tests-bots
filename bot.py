@@ -159,5 +159,5 @@ text=f"🎀 Welcome {name} ji!\nMain Lovely hoon — aapki chat wali dost 💁�
 
 app.run()
 
-Ami ekta code dile Tumi erokom system code dite parba....bolte gele adjust ba adjustment
+#Ami ekta code dile Tumi erokom system code dite parba....bolte gele adjust ba adjustment
 
