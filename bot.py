@@ -15,7 +15,7 @@ CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "TrickHubBD")
 
 # 🤖 Pyrogram Bot
 app = Client(
-    "Hosted_By_Vercel_Bot",
+    "lovely_gen_bot",
     api_id=API_ID,
     api_hash=API_HASH,
     bot_token=BOT_TOKEN,
@@ -97,7 +97,7 @@ async def start_handler(client, message):
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("📺 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")
         ]]),
-        parse_mode="Markdown"
+        parse_mode="markdown"  # ✅ changed from HTML to markdown
     )
 
 @app.on_message(filters.command("gen"))
@@ -106,7 +106,7 @@ async def gen_handler(client, message):
     if len(parts) < 2:
         return await message.reply_text(
             "⚠️ Example:\n<code>/gen 545231xxxxxxxxxx|03|27|xxx</code>",
-            parse_mode="HTML"
+            parse_mode="html"  # ✅ lowercase
         )
 
     bin_input = parts[1].strip()
@@ -116,7 +116,7 @@ async def gen_handler(client, message):
     btn = InlineKeyboardMarkup(
         [[InlineKeyboardButton("♻️ Re-Generate", callback_data=f"again|{bin_input}")]]
     )
-    await message.reply_text(text, parse_mode="HTML", reply_markup=btn)
+    await message.reply_text(text, parse_mode="html", reply_markup=btn)  # ✅ lowercase
 
 @app.on_callback_query()
 async def again_handler(client, callback_query):
@@ -129,9 +129,9 @@ async def again_handler(client, callback_query):
             [[InlineKeyboardButton("♻️ Re-Generate", callback_data=f"again|{bin_input}")]]
         )
         try:
-            await callback_query.message.edit_text(text, parse_mode="HTML", reply_markup=btn)
+            await callback_query.message.edit_text(text, parse_mode="html", reply_markup=btn)  # ✅ lowercase
         except:
-            await callback_query.message.reply_text(text, parse_mode="HTML", reply_markup=btn)
+            await callback_query.message.reply_text(text, parse_mode="html", reply_markup=btn)  # ✅ lowercase
 
 # =========================
 # 🚀 Run
