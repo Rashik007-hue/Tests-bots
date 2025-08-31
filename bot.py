@@ -97,7 +97,7 @@ async def start_handler(client, message):
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("📺 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")
         ]]),
-        parse_mode="markdown"  # ✅ changed from HTML to markdown
+        parse_mode="markdown"  # ✅ markdown is fine here
     )
 
 @app.on_message(filters.command("gen"))
