@@ -20,7 +20,7 @@ flask_app = Flask(__name__)
 
 @flask_app.route("/")
 def home():
-    return "❤️ Lovely Bot is Live!"
+    return "Fuck You,,Bot is not alive"
 
 def run():
     flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
