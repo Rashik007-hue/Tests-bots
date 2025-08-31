@@ -93,7 +93,7 @@ def generate_cc(client, message):
                 message.reply_text("⚠️ Please provide a valid number.\nExample: /gen 10")
                 return
         cc_list = "\n".join(generate_cc_number() for _ in range(count))
-        message.reply_text(f"💳 Here are {count} valid CC numbers (Luhn):\n`{cc_list}`", parse_mode="markdown")
+        message.reply_text(f"💳 Here are {count} valid CC numbers (Luhn):\n`{cc_list}`", parse_mode="Markdown")
     except Exception as e:
         message.reply_text(f"⚠️ Something went wrong: {e}")
 
