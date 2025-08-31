@@ -51,7 +51,7 @@ user_msg_log = {}
 def start(client, message):
     user = message.from_user.first_name
     message.reply_text(
-        f"👋 Namaste {user} ji!\n"
+        f"👋 Namastee {user} ji!\n"
         f"Main Lovely hoon — aapki pyari baat-cheet wali dost 💬❤️\n"
         f"Main @{CHANNEL_USERNAME} se judi hoon — zarur join karein 🎬\n\n"
         f"📺 Channel: https://t.me/{CHANNEL_USERNAME}",
