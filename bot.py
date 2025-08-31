@@ -62,20 +62,34 @@ def start(client, message):
 
 # /pass_gen command
 @app.on_message(filters.command("pass_gen"))
+@app.on_message(filters.command("pass_gen"))
 def generate_password(client, message):
     try:
-        length = 12  # default length
+        # Default length
+        length = 12
+
+        # Get user input safely
         if len(message.command) > 1:
-            length = int(message.command[1])
+            # Remove extra spaces and ensure it's a number
+            length_str = message.command[1].strip()
+            if length_str.isdigit():
+                length = int(length_str)
+            else:
+                raise ValueError("Not a valid number")
+
+            # Enforce limits
             if length < 6:
                 length = 6
             elif length > 50:
                 length = 50
 
+        # Generate password
         chars = string.ascii_letters + string.digits + string.punctuation
         password = "".join(random.choice(chars) for _ in range(length))
 
+        # Send password
         message.reply_text(f"🔐 Your random password:\n`{password}`", parse_mode="markdown")
+
     except ValueError:
         message.reply_text("⚠️ Please provide a valid number for password length.\nExample: /pass_gen 16")
     except Exception as e:
