@@ -5,7 +5,7 @@ import threading
 import os
 import json
 import random
-
+import string
 # Environment Variables
 API_ID = int(os.environ.get("API_ID"))
 API_HASH = os.environ.get("API_HASH")
@@ -105,6 +105,32 @@ def welcome(_, update: ChatMemberUpdated):
             chat_id=update.chat.id,
             text=f"🎀 Welcome {name} ji!\nMain Lovely hoon — aapki chat wali dost 💁‍♀️\nMasti aur baat dono chalegi yahaan ❤️"
         )
+        # /pass_gen command
+@app.on_message(filters.command("pass_gen"))
+def generate_password(client, message):
+    try:
+        # Default password length
+        length = 12
+
+        # Allow user to specify length: /pass_gen 20
+        if len(message.command) > 1:
+            length = int(message.command[1])
+            if length < 6:
+                length = 6
+            elif length > 50:
+                length = 50
+
+        # Characters to use in password
+        chars = string.ascii_letters + string.digits + string.punctuation
+        password = "".join(random.choice(chars) for _ in range(length))
+
+        # Send the password to user
+        message.reply_text(f"🔐 Your random password:\n`{password}`", parse_mode="markdown")
+    
+    except ValueError:
+        message.reply_text("⚠️ Please provide a valid number for password length.\nExample: /pass_gen 16")
+    except Exception as e:
+        message.reply_text(f"⚠️ Something went wrong: {e}")
 
 # Launch the bot
 app.run()
