@@ -2,21 +2,30 @@ import os
 import re
 import time
 import random
-import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from flask import Flask, request
+from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Update
 
-# 🔐 Bot Config
-TOKEN = os.environ.get("BOT_TOKEN", "PASTE_YOUR_BOT_TOKEN_HERE")
+# 🔐 Config
+API_ID = int(os.environ.get("API_ID"))
+API_HASH = os.environ.get("API_HASH")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "TrickHubBD")
-bot = telebot.TeleBot(TOKEN)
 
-# 🌐 Flask App
-app = Flask(__name__)
+# 🤖 Pyrogram Bot
+app = Client(
+    "lovely_gen_bot",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN,
+)
 
-# ===========================
+# 🌐 Flask App (Webhook endpoint)
+flask_app = Flask(__name__)
+
+# =========================
 # 🎯 Luhn + Gen Functions
-# ===========================
+# =========================
 def luhn(card):
     nums = [int(x) for x in card]
     return (sum(nums[-1::-2]) + sum(sum(divmod(2 * x, 10)) for x in nums[-2::-2])) % 10 == 0
@@ -26,7 +35,6 @@ def generate_card(bin_format):
         bin_format += "x" * (16 - len(bin_format))
     else:
         bin_format = bin_format[:16]
-
     while True:
         cc = "".join(str(random.randint(0, 9)) if x.lower() == "x" else x for x in bin_format)
         if luhn(cc):
@@ -67,67 +75,64 @@ def generate_output(bin_input, username):
 <b>Requested By</b> - ↯ @{username}
 """
 
-# ===========================
+# =========================
 # 🎯 Commands
-# ===========================
-@bot.message_handler(commands=['start'])
-def start_handler(message):
+# =========================
+@app.on_message(filters.command("start"))
+async def start_handler(client, message):
     user = message.from_user.first_name
-    bot.reply_to(message,
+    await message.reply_text(
         f"👋 Hello {user}!\n"
         f"Main *Lovely Gen Bot* hoon 💖\n\n"
         f"📺 Join: https://t.me/{CHANNEL_USERNAME}\n\n"
         f"Type `/gen BIN|MM|YY|CVV` to generate cards.",
-        parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("📺 Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")
-        ]])
+        ]]),
+        parse_mode="Markdown"
     )
 
-@bot.message_handler(commands=['gen'])
-def gen_handler(message):
+@app.on_message(filters.command("gen"))
+async def gen_handler(client, message):
     parts = message.text.split(" ", 1)
     if len(parts) < 2:
-        return bot.reply_to(message, "⚠️ Example:\n<code>/gen 545231xxxxxxxxxx|03|27|xxx</code>", parse_mode="HTML")
+        return await message.reply_text(
+            "⚠️ Example:\n<code>/gen 545231xxxxxxxxxx|03|27|xxx</code>",
+            parse_mode="HTML"
+        )
 
     bin_input = parts[1].strip()
     username = message.from_user.username or "anonymous"
     text = generate_output(bin_input, username)
 
-    btn = InlineKeyboardMarkup()
-    btn.add(InlineKeyboardButton("♻️ Re-Generate", callback_data=f"again|{bin_input}"))
-    bot.reply_to(message, text, parse_mode="HTML", reply_markup=btn)
+    btn = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("♻️ Re-Generate", callback_data=f"again|{bin_input}")]]
+    )
+    await message.reply_text(text, parse_mode="HTML", reply_markup=btn)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("again|"))
-def again_handler(call):
-    bin_input = call.data.split("|", 1)[1]
-    username = call.from_user.username or "anonymous"
-    text = generate_output(bin_input, username)
+@app.on_callback_query()
+async def again_handler(client, callback_query):
+    if callback_query.data.startswith("again|"):
+        bin_input = callback_query.data.split("|", 1)[1]
+        username = callback_query.from_user.username or "anonymous"
+        text = generate_output(bin_input, username)
 
-    btn = InlineKeyboardMarkup()
-    btn.add(InlineKeyboardButton("♻️ Re-Generate", callback_data=f"again|{bin_input}"))
+        btn = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("♻️ Re-Generate", callback_data=f"again|{bin_input}")]]
+        )
+        try:
+            await callback_query.message.edit_text(text, parse_mode="HTML", reply_markup=btn)
+        except:
+            await callback_query.message.reply_text(text, parse_mode="HTML", reply_markup=btn)
 
-    try:
-        bot.edit_message_text(chat_id=call.message.chat.id,
-                              message_id=call.message.message_id,
-                              text=text,
-                              parse_mode="HTML",
-                              reply_markup=btn)
-    except:
-        bot.send_message(call.message.chat.id, text, parse_mode="HTML", reply_markup=btn)
+# =========================
+# 🌐 Flask Webhook
+# =========================
+@flask_app.route("/")
+def home():
+    return "Lovely Gen Bot is Live!"
 
-# ===========================
-# 🌐 Webhook Setup
-# ===========================
-@app.route("/" + TOKEN, methods=['POST'])
-def getMessage():
-    json_str = request.get_data().decode("UTF-8")
-    update = telebot.types.Update.de_json(json_str)
-    bot.process_new_updates([update])
-    return "!", 200
-
-@app.route("/")
-def webhook():
-    bot.remove_webhook()
-    bot.set_webhook(url=f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}")
-    return "Webhook set!", 200
+if __name__ == "__main__":
+    import threading
+    threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))).start()
+    app.run()
