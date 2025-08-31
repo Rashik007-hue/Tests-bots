@@ -2,9 +2,10 @@ import os
 import re
 import time
 import random
-from flask import Flask, request
+import threading
+from flask import Flask
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Update
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # 🔐 Config
 API_ID = int(os.environ.get("API_ID"))
@@ -14,14 +15,21 @@ CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "TrickHubBD")
 
 # 🤖 Pyrogram Bot
 app = Client(
-    "lovely_gen_bot",
+    "Hosted_By_Vercel_Bot",
     api_id=API_ID,
     api_hash=API_HASH,
     bot_token=BOT_TOKEN,
 )
 
-# 🌐 Flask App (Webhook endpoint)
+# 🌐 Flask App (Keep Alive)
 flask_app = Flask(__name__)
+
+@flask_app.route("/")
+def home():
+    return "❤️ Lovely Gen Bot is Live!"
+
+def run_flask():
+    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
 
 # =========================
 # 🎯 Luhn + Gen Functions
@@ -126,13 +134,8 @@ async def again_handler(client, callback_query):
             await callback_query.message.reply_text(text, parse_mode="HTML", reply_markup=btn)
 
 # =========================
-# 🌐 Flask Webhook
+# 🚀 Run
 # =========================
-@flask_app.route("/")
-def home():
-    return "Lovely Gen Bot is Live!"
-
 if __name__ == "__main__":
-    import threading
-    threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))).start()
+    threading.Thread(target=run_flask).start()
     app.run()
