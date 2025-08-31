@@ -5,7 +5,6 @@ import threading
 import os
 import json
 import random
-import string
 
 # Environment Variables
 API_ID = int(os.environ.get("API_ID"))
@@ -23,7 +22,6 @@ flask_app = Flask(__name__)
 def home():
     return "❤️ Lovely Bot is Live!"
 
-# Run Flask in background
 def run():
     flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
 
@@ -34,7 +32,6 @@ with open("conversation.json", "r", encoding="utf-8") as f:
     categories = json.load(f)
 all_replies = sum(categories.values(), [])
 
-# Exact phrase trigger → reply map
 conversation_map = {
     "hi": "Hi hi! Lovely yahan hai aapke liye 💖",
     "hello": "Hello ji! Kaise ho aap? 😊",
@@ -43,7 +40,6 @@ conversation_map = {
     "love you": "Main bhi aapko pyar karti hoon 😘",
 }
 
-# Message History
 user_msg_log = {}
 
 # /start command
@@ -60,38 +56,131 @@ def start(client, message):
         ]])
     )
 
-# /pass_gen command
-@app.on_message(filters.command("pass_gen"))
-@app.on_message(filters.command("pass_gen"))
-def generate_password(client, message):
-    try:
-        # Default length
-        length = 12
-
-        # Get user input safely
-        if len(message.command) > 1:
-            # Remove extra spaces and ensure it's a number
-            length_str = message.command[1].strip()
-            if length_str.isdigit():
-                length = int(length_str)
+# Luhn algorithm CC generator
+def generate_cc_number(prefix="400000", length=16):
+    cc_number = [int(x) for x in prefix]
+    while len(cc_number) < (length - 1):
+        cc_number.append(random.randint(0, 9))
+    def luhn_checksum(number):
+        sum_ = 0
+        reverse_digits = number[::-1]
+        for i, digit in enumerate(reverse_digits):
+            if i % 2 == 0:
+                sum_ += digit
             else:
-                raise ValueError("Not a valid number")
+                d = digit * 2
+                if d > 9:
+                    d -= 9
+                sum_ += d
+        return (10 - (sum_ % 10)) % 10
+    cc_number.append(luhn_checksum(cc_number))
+    return "".join(map(str, cc_number))
 
-            # Enforce limits
-            if length < 6:
-                length = 6
-            elif length > 50:
-                length = 50
+# /gen command with optional count
+@app.on_message(filters.command("gen"))
+def generate_cc(client, message):
+    try:
+        count = 10  # default
+        if len(message.command) > 1:
+            arg = message.command[1].strip()
+            if arg.isdigit():
+                count = int(arg)
+                if count < 1:
+                    count = 1
+                elif count > 50:
+                    count = 50
+            else:
+                message.reply_text("⚠️ Please provide a valid number.\nExample: /gen 10")
+                return
+        cc_list = "\n".join(generate_cc_number() for _ in range(count))
+        message.reply_text(f"💳 Here are {count} valid CC numbers (Luhn):\n`{cc_list}`", parse_mode="markdown")
+    except Exception as e:
+        message.reply_text(f"⚠️ Something went wrong: {e}")
 
-        # Generate password
-        chars = string.ascii_letters + string.digits + string.punctuation
-        password = "".join(random.choice(chars) for _ in range(length))
+# Conversation Handler
+@app.on_message(filters.text & filters.private)
+def handle_private(_, message):
+    text = message.text.lower().strip()
+    if message.from_user.is_bot or text.startswith("/"):  
+        return  
 
-        # Send password
-        message.reply_text(f"🔐 Your random password:\n`{password}`", parse_mode="markdown")
+    user_id = message.from_user.id  
+    if user_id not in user_msg_log:  
+        user_msg_log[user_id] = {}  
+    user_msg_log[user_id][text] = user_msg_log[user_id].get(text, 0) + 1  
+    if user_msg_log[user_id][text] > 2:  
+        return  
 
-    except ValueError:
-        message.reply_text("⚠️ Please provide a valid number for password length.\nExample: /pass_gen 16")
+    for keyword, reply in conversation_map.items():  
+        if keyword in text:  
+            message.reply_text(reply)  
+            return  
+
+    if any(w in text for w in ["love", "crush", "miss"]):  
+        reply = random.choice(categories.get("love", all_replies))  
+    elif any(w in text for w in ["sad", "cry", "hurt"]):  
+        reply = random.choice(categories.get("sad", all_replies))  
+    elif any(w in text for w in ["happy", "great", "awesome"]):  
+        reply = random.choice(categories.get("happy", all_replies))  
+    elif any(w in text for w in ["hi", "hello", "kaise", "kya", "bored"]):  
+        reply = random.choice(categories.get("daily", all_replies))  
+    elif any(w in text for w in ["masti", "party", "enjoy"]):  
+        reply = random.choice(categories.get("fun", all_replies))  
+    else:  
+        reply = random.choice(all_replies)  
+
+    message.reply_text(reply)
+
+# Welcome message for new members
+@app.on_chat_member_updated()
+def welcome(_, update: ChatMemberUpdated):
+    if update.new_chat_member.status == "member" and not update.new_chat_member.user.is_bot:
+        name = update.new_chat_member.user.first_name
+        app.send_message(
+            chat_id=update.chat.id,
+            text=f"🎀 Welcome {name} ji!\nMain Lovely hoon — aapki chat wali dost 💁‍♀️\nMasti aur baat dono chalegi yahaan ❤️"
+        )
+
+# Launch the bot
+app.run()
+# Luhn algorithm CC generator
+def generate_cc_number(prefix="400000", length=16):
+    cc_number = [int(x) for x in prefix]
+    while len(cc_number) < (length - 1):
+        cc_number.append(random.randint(0, 9))
+    def luhn_checksum(number):
+        sum_ = 0
+        reverse_digits = number[::-1]
+        for i, digit in enumerate(reverse_digits):
+            if i % 2 == 0:
+                sum_ += digit
+            else:
+                d = digit * 2
+                if d > 9:
+                    d -= 9
+                sum_ += d
+        return (10 - (sum_ % 10)) % 10
+    cc_number.append(luhn_checksum(cc_number))
+    return "".join(map(str, cc_number))
+
+# /gen command with optional count
+@app.on_message(filters.command("gen"))
+def generate_cc(client, message):
+    try:
+        count = 10  # default
+        if len(message.command) > 1:
+            arg = message.command[1].strip()
+            if arg.isdigit():
+                count = int(arg)
+                if count < 1:
+                    count = 1
+                elif count > 50:
+                    count = 50
+            else:
+                message.reply_text("⚠️ Please provide a valid number.\nExample: /gen 10")
+                return
+        cc_list = "\n".join(generate_cc_number() for _ in range(count))
+        message.reply_text(f"💳 Here are {count} valid CC numbers (Luhn):\n`{cc_list}`", parse_mode="markdown")
     except Exception as e:
         message.reply_text(f"⚠️ Something went wrong: {e}")
 
