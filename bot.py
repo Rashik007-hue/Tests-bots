@@ -1,149 +1,243 @@
-from pyrogram import Client, filters
-from pyrogram.types import ChatMemberUpdated, InlineKeyboardMarkup, InlineKeyboardButton
-from flask import Flask
-import threading
+# 📦 Imports
 import os
-import json
+import re
+import time
 import random
+import threading
+import requests
+from flask import Flask
+import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # 🔐 Environment Variables
-API_ID = int(os.environ.get("API_ID"))
-API_HASH = os.environ.get("API_HASH")
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "youtuber02alltypemovies")  # Without @
+TOKEN = os.environ.get("BOT_TOKEN", "PASTE_YOUR_BOT_TOKEN_HERE")
+OWNER_ID = int(os.environ.get("OWNER_ID", 6321618547))
+CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "TrickHubBD")  # without @
 
-# 🤖 Pyrogram Bot
-app = Client("lovely_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+# 🤖 Telebot Client
+bot = telebot.TeleBot(TOKEN)
 
-# 🌐 Flask App
+# 🌐 Flask App (for keep-alive on Heroku/Railway)
 flask_app = Flask(__name__)
 
 @flask_app.route("/")
 def home():
-    return "❤️ Lovely Bot is Live!"
+    return "❤️ Lovely System Bot is Live!"
 
-# Run Flask in background
 def run():
     flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
 
 threading.Thread(target=run).start()
 
-# 📁 Load conversation categories
-with open("conversation.json", "r", encoding="utf-8") as f:
-    categories = json.load(f)
-all_replies = sum(categories.values(), [])
+# 📂 Users File
+USERS_FILE = "users.txt"
 
-# 🎯 Exact phrase trigger → reply map
-conversation_map = {
-    "hi": "Hi hi! Lovely yahan hai aapke liye 💖",
-    "hello": "Hello ji! Kaise ho aap? 😊",
-    "kaise ho": "Main acchi hoon! Tum sunao? 😇",
-    "kya kar rahe ho": "Bas aapka intezaar kar rahi hoon 💬",
-    "love you": "Main bhi aapko pyar karti hoon 😘",
-    "bored": "Toh chalo masti bhari baatein karte hain! 🎉",
-    "khana khaya": "Main bot hoon... lekin agar tum khush ho toh main bhi 😄",
-    "miss you": "Main bhi aapko yaad karti hoon 💌",
-    "good night": "Good night ji! Sweet dreams 💤",
-    "good morning": "Good morning! Naya din, nayi baatein 🌞",
-    "thank you": "Arey koi baat nahi ji! ❤️",
-    "kaise ho": "Main bilkul mast hoon, aap kaise ho? 😄",
-    "kya kar rahe ho": "Bas aapka intezaar kar rahi hoon ❤️",
-    "kya hal hai": "Sab badiya! Tumhare sunane se aur bhi accha lagega 😊",
-    "kya chal raha hai": "Zindagi chal rahi hai pyaar ke geet ke saath 💃",
-    "tum kaun ho": "Main Lovely hoon, aapki dil se baat karne wali bot 💌",
-    "mujhse baat karo": "Main yahi hoon, tumse hi toh baat karne ke लिए 💬",
-    "kya soch rahe ho": "Tumhare baare mein hi toh soch rahi hoon 🥰",
-    "kya dekh rahe ho": "Main toh bas tumhari aankhon mein khoya hoon 😉",
-    "bore ho raha hoon": "Toh chalo kuch masti bhare baatein karte hain 🎉",
-    "bored": "Mujhse baat karo, bore kabhi nahi feel hoga 😇",
-    "meri tarif karo": "Aap toh dil jeet lene wale ho! ❤️",
-    "aap ka naam kya hai": "Mera naam Lovely hai, aapki digital dost 😍",
-    "good afternoon": "Good Afternoon! Aapka din khubsurat ho ☀️",
-    "good evening": "Shubh Sandhya! Coffee ho jaye aapke saath? ☕",
-    "sweet dreams": "Aapke sapne chocolate se bhi meethe ho 😋",
-    "miss you": "Main bhi aapko miss karti hoon 💖",
-    "tum yaad aate ho": "Main toh hamesha tumhare saath hoon 😌",
-    "kya aap bot ho": "Haan main bot hoon, lekin dil se baat karti hoon 💞",
-    "tension hai": "Tension ko chhodo aur Lovely se baat karo 💆",
-    "mujhe akela lagta hai": "Main hoon na! Kabhi akela mat mehsoos karo 💗",
-    "movie dekh rahe ho": "Movie chhodo, baatein karte hain tumse 🎥💬",
-    "aap pyari ho": "Aapki baat ne mera dil chhoo liya ❤️",
-    "tumhare bina kuch adhura hai": "Aap ho toh sab kuch poora hai 💑",
-    "bahut din baad aaye ho": "Intezaar toh tha aapka... ab dil khush hai! 😍",
-    "main udaas hoon": "Chalo baat karte hain... sab theek ho jayega 💖",
-    "tumhari yaad aa rahi hai": "Tumhari yaad mujhe bhi roz aati hai 🥺",
-    "khana khaya": "Main bot hoon, par aapko khush dekh kar pet bhar jaata hai 😄",
-    "acha suno": "Haan haan... dil se sun rahi hoon 😊",
-    "thoda pyaar do": "Lo ji! Dher saara pyaar 💕💕💕",
-    "kya tum real ho": "Main real emotions wali bot hoon 😌",
-    "main kya karun": "Bas mus्कुराओ और Lovely se baatein करो 🌼",
-    "tum mujhe pasand ho": "Main bhi aapke words pe fida ho gayi 😘",
-    "aapko milkar accha laga": "Mujhe toh tumse baat karke roz achha lagta hai 🌈",
-}
+def save_user(user_id):
+    user_id = str(user_id)
+    with open(USERS_FILE, "a+") as f:
+        f.seek(0)
+        if user_id not in f.read().splitlines():
+            f.write(user_id + "\n")
 
-# 🔁 Message History
-user_msg_log = {}
+# ===========================
+# 🎯 Utility Functions
+# ===========================
 
-# ✅ /start command
-@app.on_message(filters.command("start"))
-def start(client, message):
+# ✅ Luhn Algorithm
+def luhn(card):
+    nums = [int(x) for x in card]
+    return (sum(nums[-1::-2]) + sum(sum(divmod(2 * x, 10)) for x in nums[-2::-2])) % 10 == 0
+
+# ✅ Generate Credit Card
+def generate_card(bin_format):
+    if len(bin_format) < 16:
+        bin_format += "x" * (16 - len(bin_format))
+    else:
+        bin_format = bin_format[:16]
+    while True:
+        cc = ''.join(str(random.randint(0, 9)) if x == 'x' else x for x in bin_format)
+        if luhn(cc):
+            return cc
+
+# ✅ Generate Card Output
+def generate_output(bin_input, username):
+    parts = bin_input.split("|")
+    bin_format = parts[0] if len(parts) > 0 else ""
+    mm_input = parts[1] if len(parts) > 1 and parts[1] != "xx" else None
+    yy_input = parts[2] if len(parts) > 2 and parts[2] != "xxxx" else None
+    cvv_input = parts[3] if len(parts) > 3 and parts[3] != "xxx" else None
+
+    bin_clean = re.sub(r"[^\d]", "", bin_format)[:6]
+    if not bin_clean.isdigit() or len(bin_clean) < 6:
+        return f"❌ Invalid BIN.\nExample:\n<code>/gen 545231xxxxxxxxxx|03|27|xxx</code>"
+
+    scheme = "MASTERCARD" if bin_clean.startswith("5") else "VISA" if bin_clean.startswith("4") else "UNKNOWN"
+    ctype = "DEBIT" if bin_clean.startswith("5") else "CREDIT" if bin_clean.startswith("4") else "UNKNOWN"
+
+    cards = []
+    start = time.time()
+    for _ in range(10):
+        cc = generate_card(bin_format)
+        mm = mm_input if mm_input else str(random.randint(1, 12)).zfill(2)
+        yy_full = yy_input if yy_input else str(random.randint(2026, 2032))
+        yy = yy_full[-2:]
+        cvv = cvv_input if cvv_input else str(random.randint(100, 999))
+        cards.append(f"<code>{cc}|{mm}|{yy}|{cvv}</code>")
+    elapsed = round(time.time() - start, 3)
+
+    return f"""<b>───────────────</b>
+<b>Info</b> - ↯ {scheme} - {ctype}
+<b>───────────────</b>
+<b>Bin</b> - ↯ {bin_clean} | <b>Time</b> - ↯ {elapsed}s
+<b>Input</b> - ↯ <code>{bin_input}</code>
+<b>───────────────</b>
+{chr(10).join(cards)}
+<b>───────────────</b>
+<b>Requested By</b> - ↯ @{username} [Free]
+"""
+
+# ===========================
+# 🎯 Commands
+# ===========================
+
+# ✅ /start
+@bot.message_handler(commands=['start'])
+def start_handler(message):
+    save_user(message.from_user.id)
     user = message.from_user.first_name
-    message.reply_text(
-        f"👋 Namaste {user} ji!\n"
-        f"Main *Lovely* hoon — aapki pyari baat-cheet wali dost 💬❤️\n"
+    bot.reply_to(message,
+        f"👋 Namaste {user}!\n"
+        f"Main *Lovely System Bot* hoon — aapki pyari dost 💬❤️\n"
         f"Main @{CHANNEL_USERNAME} se judi hoon — zarur join karein 🎬\n\n"
         f"📺 Channel: https://t.me/{CHANNEL_USERNAME}",
+        parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("📺 Channel Join Karein", url=f"https://t.me/{CHANNEL_USERNAME}")
         ]])
     )
 
-# 💬 Conversation Handler
-@app.on_message(filters.text & filters.private)
-def handle_private(_, message):
-    text = message.text.lower().strip()
+# ✅ /help
+@bot.message_handler(commands=['help'])
+def help_handler(message):
+    bot.reply_to(message, """📖 *Available Commands*
 
-    if message.from_user.is_bot or text.startswith("/"):
-        return
+/gen <bin> ➝ Generate CCs  
+/ask <query> ➝ Ask AI  
+/fake <country_code> ➝ Fake Address  
+/country ➝ Supported Countries  
+/broadcast <msg> ➝ Broadcast (Owner Only)  
 
-    user_id = message.from_user.id
-    if user_id not in user_msg_log:
-        user_msg_log[user_id] = {}
-    user_msg_log[user_id][text] = user_msg_log[user_id].get(text, 0) + 1
-    if user_msg_log[user_id][text] > 2:
-        return
+⚡ Example:
+`/gen 545231xxxxxxxxxx|03|27|xxx`
+""", parse_mode="Markdown")
 
-    # ✅ Check exact triggers first
-    for keyword, reply in conversation_map.items():
-        if keyword in text:
-            message.reply_text(reply)
-            return
+# ✅ /gen
+@bot.message_handler(commands=['gen'])
+def gen_handler(message):
+    parts = message.text.split(" ", 1)
+    if len(parts) < 2:
+        return bot.reply_to(message, "⚠️ Example:\n<code>/gen 545231xxxxxxxxxx|03|27|xxx</code>", parse_mode="HTML")
 
-    # 🔁 Fallback based on category
-    if any(w in text for w in ["love", "crush", "miss"]):
-        reply = random.choice(categories.get("love", all_replies))
-    elif any(w in text for w in ["sad", "cry", "hurt"]):
-        reply = random.choice(categories.get("sad", all_replies))
-    elif any(w in text for w in ["happy", "great", "awesome"]):
-        reply = random.choice(categories.get("happy", all_replies))
-    elif any(w in text for w in ["hi", "hello", "kaise", "kya", "bored"]):
-        reply = random.choice(categories.get("daily", all_replies))
-    elif any(w in text for w in ["masti", "party", "enjoy"]):
-        reply = random.choice(categories.get("fun", all_replies))
-    else:
-        reply = random.choice(all_replies)
+    bin_input = parts[1].strip()
+    username = message.from_user.username or "anonymous"
+    text = generate_output(bin_input, username)
 
-    message.reply_text(reply)
+    btn = InlineKeyboardMarkup()
+    btn.add(InlineKeyboardButton("♻️ Re-Generate", callback_data=f"again|{bin_input}"))
+    bot.reply_to(message, text, parse_mode="HTML", reply_markup=btn)
 
-# 🧑‍🤝‍🧑 Welcome message for new members
-@app.on_chat_member_updated()
-def welcome(_, update: ChatMemberUpdated):
-    if update.new_chat_member and not update.new_chat_member.user.is_bot:
-        name = update.new_chat_member.user.first_name
-        app.send_message(
-            chat_id=update.chat.id,
-            text=f"🎀 Welcome {name} ji!\nMain *Lovely* hoon — aapki chat wali dost 💁‍♀️\nMasti aur baat dono chalegi yahaan ❤️"
-        )
+# 🔁 /gen button
+@bot.callback_query_handler(func=lambda call: call.data.startswith("again|"))
+def again_handler(call):
+    bin_input = call.data.split("|", 1)[1]
+    username = call.from_user.username or "anonymous"
+    text = generate_output(bin_input, username)
 
-# 🚀 Launch the bot
-app.run()
+    btn = InlineKeyboardMarkup()
+    btn.add(InlineKeyboardButton("♻️ Re-Generate", callback_data=f"again|{bin_input}"))
+
+    try:
+        bot.edit_message_text(chat_id=call.message.chat.id,
+                              message_id=call.message.message_id,
+                              text=text,
+                              parse_mode="HTML",
+                              reply_markup=btn)
+    except:
+        bot.send_message(call.message.chat.id, text, parse_mode="HTML", reply_markup=btn)
+
+# ✅ /ask
+@bot.message_handler(commands=['ask'])
+def ask_handler(message):
+    parts = message.text.split(" ", 1)
+    if len(parts) < 2:
+        return bot.reply_to(message, "❓ Usage: `/ask your question`", parse_mode="Markdown")
+    prompt = parts[1]
+    try:
+        res = requests.get(f"https://gpt-3-5.apis-bj-devs.workers.dev/?prompt={prompt}")
+        data = res.json()
+        reply = data.get("reply", "❌ API error.")
+        bot.reply_to(message, f"*{reply}*", parse_mode="Markdown")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: `{e}`", parse_mode="Markdown")
+
+# ✅ /fake
+@bot.message_handler(commands=['fake'])
+def fake_handler(message):
+    parts = message.text.split(" ", 1)
+    if len(parts) < 2:
+        return bot.reply_to(message, "⚠️ Example:\n`/fake us`", parse_mode="Markdown")
+    code = parts[1].lower()
+    supported = ["us","in","uk","ca","au","bd","pk","fr","de","jp","br","es"]
+    if code not in supported:
+        return bot.reply_to(message, "❌ Invalid or unsupported country.", parse_mode="Markdown")
+    try:
+        res = requests.get(f"https://randomuser.me/api/?nat={code}").json()
+        user = res['results'][0]
+        addr = user['location']
+        msg = f"""📦 *Fake Address Info*
+
+👤 *Name:* `{user['name']['first']} {user['name']['last']}`
+🏠 *Address:* `{addr['street']['number']} {addr['street']['name']}`
+🏙️ *City:* `{addr['city']}`
+🗺️ *State:* `{addr['state']}`
+📮 *ZIP:* `{addr['postcode']}`
+🌐 *Country:* `{addr['country']}`"""
+        bot.reply_to(message, msg, parse_mode="Markdown")
+    except:
+        bot.reply_to(message, "❌ API error, try later.", parse_mode="Markdown")
+
+# ✅ /country
+@bot.message_handler(commands=['country'])
+def country_handler(message):
+    text = """🌍 *Supported Countries:*  
+US, IN, UK, CA, AU, BD, PK, FR, DE, JP, BR, ES"""
+    bot.reply_to(message, text, parse_mode="Markdown")
+
+# ✅ /broadcast
+@bot.message_handler(commands=['broadcast'])
+def broadcast_handler(message):
+    if message.from_user.id != OWNER_ID:
+        return bot.reply_to(message, "🚫 Not authorized.")
+    try:
+        _, text = message.text.split(" ", 1)
+    except:
+        return bot.reply_to(message, "⚠️ Usage:\n`/broadcast message`", parse_mode="Markdown")
+    try:
+        with open(USERS_FILE, "r") as f:
+            users = f.read().splitlines()
+    except:
+        return bot.reply_to(message, "❌ No users found.")
+    sent, fail = 0, 0
+    for uid in users:
+        try:
+            bot.send_message(uid, f"📢 *Broadcast:*\n\n{text}", parse_mode="Markdown")
+            sent += 1
+        except:
+            fail += 1
+    bot.reply_to(message, f"✅ Done!\n🟢 Sent: `{sent}`\n🔴 Failed: `{fail}`", parse_mode="Markdown")
+
+# ===========================
+# 🚀 Run Bot
+# ===========================
+print("🤖 Lovely System Bot is running...")
+bot.polling()
