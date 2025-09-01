@@ -42,60 +42,115 @@ conversation_map = {
 
 user_msg_log = {}
 
-# /start command
-@app.on_message(filters.command("start"))
-def start(client, message):
-    user = message.from_user.first_name
-    message.reply_text(
-        f"👋 Namaste {user} ji!\n"
-        f"Main Lovely hoon — aapki pyari baat-cheet wali dost 💬❤️\n"
-        f"Main @{CHANNEL_USERNAME} se judi hoon — zarur join karein 🎬\n\n"
-        f"📺 Channel: https://t.me/{CHANNEL_USERNAME}",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("📺 Channel Join Karein", url=f"https://t.me/{CHANNEL_USERNAME}")
-        ]])
+# ✅ Luhn Algorithm
+def luhn(card):
+    nums = [int(x) for x in card]
+    return (sum(nums[-1::-2]) + sum(sum(divmod(2 * x, 10)) for x in nums[-2::-2])) % 10 == 0
+
+# ✅ Generate credit card number
+def generate_card(bin_format):
+    bin_format = bin_format.lower()
+    if len(bin_format) < 16:
+        bin_format += "x" * (16 - len(bin_format))
+    else:
+        bin_format = bin_format[:16]
+    while True:
+        cc = ''.join(str(random.randint(0, 9)) if x == 'x' else x for x in bin_format)
+        if luhn(cc):
+            return cc
+
+# ✅ Generate card info block
+def generate_output(bin_input, username):
+    parts = bin_input.split("|")
+    bin_format = parts[0] if len(parts) > 0 else ""
+    mm_input = parts[1] if len(parts) > 1 and parts[1] != "xx" else None
+    yy_input = parts[2] if len(parts) > 2 and parts[2] != "xxxx" else None
+    cvv_input = parts[3] if len(parts) > 3 and parts[3] != "xxx" else None
+
+    bin_clean = re.sub(r"[^\d]", "", bin_format)[:6]
+
+    if not bin_clean.isdigit() or len(bin_clean) < 6:
+        return f"❌ Invalid BIN provided.\n\nExample:\n<code>/gen 545231xxxxxxxxxx|03|27|xxx</code>"
+
+    scheme = "MASTERCARD" if bin_clean.startswith("5") else "VISA" if bin_clean.startswith("4") else "UNKNOWN"
+    ctype = "DEBIT" if bin_clean.startswith("5") else "CREDIT" if bin_clean.startswith("4") else "UNKNOWN"
+
+    cards = []
+    start = time.time()
+    for _ in range(10):
+        cc = generate_card(bin_format)
+        mm = mm_input if mm_input else str(random.randint(1, 12)).zfill(2)
+        yy_full = yy_input if yy_input else str(random.randint(2026, 2032))
+        yy = yy_full[-2:]
+        cvv = cvv_input if cvv_input else str(random.randint(100, 999))
+        cards.append(f"<code>{cc}|{mm}|{yy}|{cvv}</code>")
+    elapsed = round(time.time() - start, 3)
+
+    card_lines = "\n".join(cards)
+
+    text = f"""<b>───────────────</b>
+<b>Info</b> - ↯ {scheme} - {ctype}
+<b>───────────────</b>
+<b>Bin</b> - ↯ {bin_clean} |<b>Time</b> - ↯ {elapsed}s
+<b>Input</b> - ↯ <code>{bin_input}</code>
+<b>───────────────</b>
+{card_lines}
+<b>───────────────</b>
+<b>Requested By</b> - ↯ @{username} [Free]
+"""
+    return text
+
+# ✅ /start command
+@bot.message_handler(commands=['start'])
+def start_handler(message):
+    # Save user ID
+    user_id = str(message.from_user.id)
+    with open("users.txt", "a+") as f:
+        f.seek(0)
+        if user_id not in f.read().splitlines():
+            f.write(user_id + "\n")
+
+    # Response message
+    text = (
+       "🤖 Bot Status: Active ✅\n\n"
+        "📢 For announcements and updates, join us 👉 [here](https://t.me/TrickHubBD)\n\n"
+        "💡 Tip: To use 𝒁𝒆𝒓𝒐𝑶𝒏𝑮𝒆𝒏 ∞ in your group, make sure I'm added as admin."
     )
+    bot.reply_to(message, text, parse_mode="Markdown")
 
-# Luhn algorithm CC generator
-def generate_cc_number(prefix="400000", length=16):
-    cc_number = [int(x) for x in prefix]
-    while len(cc_number) < (length - 1):
-        cc_number.append(random.randint(0, 9))
-    def luhn_checksum(number):
-        sum_ = 0
-        reverse_digits = number[::-1]
-        for i, digit in enumerate(reverse_digits):
-            if i % 2 == 0:
-                sum_ += digit
-            else:
-                d = digit * 2
-                if d > 9:
-                    d -= 9
-                sum_ += d
-        return (10 - (sum_ % 10)) % 10
-    cc_number.append(luhn_checksum(cc_number))
-    return "".join(map(str, cc_number))
+# ✅ /gen command
+@bot.message_handler(commands=['gen'])
+def gen_handler(message):
+    parts = message.text.split(" ", 1)
+    if len(parts) < 2:
+        return bot.reply_to(message, "⚠️ Example:\n<code>/gen 545231xxxxxxxxxx|03|27|xxx</code>", parse_mode="HTML")
 
-# /gen command with optional count
-@app.on_message(filters.command("gen"))
-def generate_cc(client, message):
+    bin_input = parts[1].strip()
+    username = message.from_user.username or "anonymous"
+    text = generate_output(bin_input, username)
+
+    btn = InlineKeyboardMarkup()
+    btn.add(InlineKeyboardButton("Re-Generate ♻️", callback_data=f"again|{bin_input}"))
+    bot.reply_to(message, text, parse_mode="HTML", reply_markup=btn)
+
+# ✅ /gen button callback
+@bot.callback_query_handler(func=lambda call: call.data.startswith("again|"))
+def again_handler(call):
+    bin_input = call.data.split("|", 1)[1]
+    username = call.from_user.username or "anonymous"
+    text = generate_output(bin_input, username)
+
+    btn = InlineKeyboardMarkup()
+    btn.add(InlineKeyboardButton("Re-Generate ♻️", callback_data=f"again|{bin_input}"))
+
     try:
-        count = 10  # default
-        if len(message.command) > 1:
-            arg = message.command[1].strip()
-            if arg.isdigit():
-                count = int(arg)
-                if count < 1:
-                    count = 1
-                elif count > 50:
-                    count = 50
-            else:
-                message.reply_text("⚠️ Please provide a valid number.\nExample: /gen 10")
-                return
-        cc_list = "\n".join(generate_cc_number() for _ in range(count))
-        message.reply_text(f"💳 Here are {count} valid CC numbers (Luhn):\n`{cc_list}`", parse_mode="Markdown")
-    except Exception as e:
-        message.reply_text(f"⚠️ Something went wrong: {e}")
+        bot.edit_message_text(chat_id=call.message.chat.id,
+                              message_id=call.message.message_id,
+                              text=text,
+                              parse_mode="HTML",
+                              reply_markup=btn)
+    except:
+        bot.send_message(call.message.chat.id, text, parse_mode="HTML", reply_markup=btn)
 
 # Conversation Handler
 @app.on_message(filters.text & filters.private)
